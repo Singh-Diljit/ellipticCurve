@@ -1,9 +1,9 @@
-"""Implement 'EC' class representing elliptic curves over Q."""
+"""Implement EllipticCurve class representing elliptic curves over Q."""
 
 from Coordinate import Coordinate, inf
-from helperFuncs import makeFrac, makeStr_EC, sqRt_Q
+from helperFuncs import makeFrac, makeStr_EC, sqRt_Q, isSmooth
 
-class EC:
+class EllipticCurve:
     """Implements elliptic curves over Q."""
 
     def __init__(self, a, b, tup=None):
@@ -14,12 +14,15 @@ class EC:
         a, b : *     : Data for coefficients in E : (y**2 = x**3 + ax + b).
         tup  : tuple : For backend init, a and b are confirmed type 'Fraction'.
 
-
         Initializes
         -----------
         self.a   : Fraction : Coefficient of linear term in associated cubic.
         self.b   : Fraction : Constant term in associated cubic.
         self.tup : tuple    : Tuple of self.x and self.y
+
+        Raises
+        ------
+        Exception : If the point does not satisify the EC.
 
         Notes
         -----
@@ -32,6 +35,9 @@ class EC:
             self.a, self.b = makeFrac(a), makeFrac(b)
 
         self.tup = (self.a, self.b)
+
+        if not(isSmooth(self.a, self.b)):
+            raise Exception('The curve is not smooth.')
 
     # Discriminant related properties
     
@@ -99,7 +105,7 @@ class EC:
     @property
     def integral(self):
         """Return if (self.a, self.b) is in Z^2."""
-        return (self.x.denominator == 1) and (self.y.denominator == 1)
+        return (self.a.denominator == 1) and (self.b.denominator == 1)
             
     def __eq__(self, other):
         """Return if self and other represent the same curve."""
@@ -111,7 +117,7 @@ class EC:
     
     def __repr__(self):
         """Return repr(self)."""
-        return f'EC(a={repr(self.a)}, b={repr(self.b)})'
+        return f'EllipticCurve(a={repr(self.a)}, b={repr(self.b)})'
     
     def __str__(self):
         """Return str(self)."""
@@ -189,7 +195,12 @@ class EC:
         P : Coordinate : A point on the curve.
         
         """
-        return (3*P.x**2 + self.a) / (2*P.y)
+        if P.y == float('inf'):
+            res = float('inf')
+        else:
+            res = (3*P.x**2 + self.a) / (2*P.y)
+            
+        return res
 
     def __add_sumExists(self, P, Q, slope):
         """Given the slope of the secant/tangent line, return P + Q.
@@ -245,7 +256,7 @@ class EC:
         if P == Q:
             res = self.double(P)
 
-        if (P == inf) or (Q == inf):
+        elif (P == inf) or (Q == inf):
             res = P if (Q == inf) else Q
 
         elif P == Q.reflect():
@@ -302,10 +313,12 @@ class EC:
                 
         return res
 
-    # Nagell-Lutz
+    # Torsion, Nagell-Lutz, Mazur's Theorem
     
     def nagellLutz(self, P):
         """Return if a point is a candidate for having finite order."""
+        if P == inf:
+            return True
         torsionCand = False
         if self.integral and P.integral:
             if P.y == 0:
@@ -322,5 +335,53 @@ class EC:
             
         return torsionCand
         
-        
-    
+    def order(self, P):
+        """Return the order of a point."""
+        orderP = float('inf')
+        if P == inf:
+            orderP = 1
+        elif self.nagellLutz(P):
+            Q = Coordinate(inf=True)
+            for k in range(1, 13):
+                Q = self.add(Q, P)
+                if Q.inf:
+                    orderP = k
+                    break
+
+        return orderP
+
+    def isTorsion(self, P):
+        """Return is a point has finite order."""
+        return self.order(P) < 13
+
+    def isOrder(self, P, k):
+        """Return the if a value is the order of a point."""
+        res = False
+        if P.inf:
+            res = (k==1)
+            
+        elif self.mult(P, k) != inf:
+            res = False
+            
+        elif k in {2, 3, 5, 7, 11}:
+            res = True
+
+        elif k == 9:
+            res = not(self.isOrder(P, 3))
+
+        elif k in {4, 6, 10}:
+            res = not(self.isOrder(P, 2))
+
+        elif k == 8:
+            res = not(self.isOrder(P, 2) or self.mult(P, 4)==inf)
+
+        elif k == 12:
+            if self.mult(P, 6) != inf:
+                res = not(self.mult(P, 4) == inf)
+            else:
+                res = False
+
+        return res
+
+            
+            
